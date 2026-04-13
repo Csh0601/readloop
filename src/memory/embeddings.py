@@ -1,18 +1,31 @@
 """本地 Embedding 封装 -- sentence-transformers, 无 API 成本"""
 from __future__ import annotations
 
+import os
 import numpy as np
 from pathlib import Path
 
 _model = None
 _MODEL_NAME = "all-MiniLM-L6-v2"  # 22MB, 384 dims, fast on CPU
+_MODEL_PATH = os.environ.get("READLOOP_EMBEDDING_MODEL", _MODEL_NAME)
 
 
 def _get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(_MODEL_NAME)
+        try:
+            _model = SentenceTransformer(_MODEL_PATH)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load embedding model '{_MODEL_PATH}': {e}\n"
+                f"Fix options:\n"
+                f"  1. Set proxy: export HTTPS_PROXY=http://...\n"
+                f"  2. Use HF mirror: export HF_ENDPOINT=https://hf-mirror.com\n"
+                f"  3. Pre-download: python -c \"from sentence_transformers import "
+                f"SentenceTransformer; SentenceTransformer('{_MODEL_NAME}')\"\n"
+                f"  4. Specify local path: export READLOOP_EMBEDDING_MODEL=/path/to/model"
+            ) from e
     return _model
 
 
@@ -103,6 +116,11 @@ class EmbeddingIndex:
             index.vectors = np.load(npy_path)
             import json
             index.ids = json.loads(ids_path.read_text(encoding="utf-8"))
+            if index.vectors is not None and len(index.ids) != index.vectors.shape[0]:
+                raise RuntimeError(
+                    f"Corrupted index: {len(index.ids)} IDs but "
+                    f"{index.vectors.shape[0]} vectors. Re-run --build-memory."
+                )
         return index
 
     def __len__(self) -> int:

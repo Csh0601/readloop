@@ -1,16 +1,16 @@
 """语义搜索 + LLM 合成回答
 
-Hybrid scoring: embedding similarity (70%) + keyword match (15%)
-+ domain tag match (10%) + confidence boost (5%).
+Hybrid scoring: embedding similarity (70%) + keyword match (20%)
++ domain tag match (10%), with multiplicative confidence adjustment (0.85-1.0).
 
 Adapted from graphify/serve.py multi-strategy scoring pattern.
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 
 from ..client import LLMClient
+from ..utils import make_entry_id
 
 _log = logging.getLogger(__name__)
 from ..config import MEMORY_DIR
@@ -23,34 +23,47 @@ _TOKEN_BUDGET = 6000
 _CHARS_PER_TOKEN = 3
 
 
+_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "that", "this", "our", "we",
+    "are", "was", "is", "of", "in", "to", "a", "an", "on",
+    "by", "from", "as", "it", "be", "has", "have", "been",
+})
+
+
 def _hybrid_score(
     entry: MemoryEntry,
     embedding_sim: float,
     query_terms: list[str],
 ) -> float:
-    """Combine embedding similarity with keyword/tag/confidence signals."""
-    # Embedding similarity (primary signal)
-    emb_score = embedding_sim * 0.70
+    """Combine embedding similarity with keyword/tag/confidence signals.
 
-    # Keyword match in content
-    content_lower = entry.content.lower()
-    if query_terms:
-        keyword_hits = sum(1 for t in query_terms if t in content_lower)
-        keyword_score = min(keyword_hits / len(query_terms), 1.0) * 0.15
+    Scoring:
+    - Embedding (70%): ReLU-clamped cosine similarity
+    - Keyword (20%): term overlap with stopword filtering, capped at 30 terms
+    - Tag (10%): domain tag overlap
+    - Confidence: multiplicative adjustment (0.85-1.0), not additive
+    """
+    emb = max(0.0, embedding_sim)
+
+    effective_terms = [t for t in query_terms if len(t) >= 3 and t not in _STOPWORDS][:30]
+
+    if effective_terms:
+        content_lower = entry.content.lower()
+        keyword_hits = sum(1 for t in effective_terms if t in content_lower)
+        keyword = min(keyword_hits / len(effective_terms), 1.0)
     else:
-        keyword_score = 0.0
+        keyword = 0.0
 
-    # Domain tag match
-    tag_score = 0.0
-    if query_terms and entry.domain_tags:
+    tag = 0.0
+    if effective_terms and entry.domain_tags:
         tags_lower = [t.lower() for t in entry.domain_tags]
-        tag_hits = sum(1 for t in query_terms if any(t in tag for tag in tags_lower))
-        tag_score = min(tag_hits / len(query_terms), 1.0) * 0.10
+        tag_hits = sum(1 for t in effective_terms if any(t in tg for tg in tags_lower))
+        tag = min(tag_hits / len(effective_terms), 1.0)
 
-    # Confidence boost
-    conf_score = entry.confidence * 0.05
+    score = 0.70 * emb + 0.20 * keyword + 0.10 * tag
+    score *= (0.85 + 0.15 * entry.confidence)
 
-    return emb_score + keyword_score + tag_score + conf_score
+    return score
 
 
 def search_memory(
@@ -58,8 +71,13 @@ def search_memory(
     store: MemoryStore,
     index: EmbeddingIndex,
     top_k: int = 20,
+    include_insights: bool = False,
 ) -> list[tuple[str, float, str]]:
     """Search memory with hybrid scoring.
+
+    Args:
+        include_insights: If False (default), excludes synthesized Q&A insights
+            from results to prevent memory amplification.
 
     Returns: [(entry_id, hybrid_score, content), ...]
     """
@@ -74,6 +92,8 @@ def search_memory(
     for entry_id, emb_sim in candidates:
         entry = store.get(entry_id)
         if not entry:
+            continue
+        if not include_insights and entry.type == "insight":
             continue
         hybrid = _hybrid_score(entry, emb_sim, query_terms)
         scored.append((entry_id, hybrid, entry.content))
@@ -116,7 +136,8 @@ def ask_with_memory(
         if not entry:
             continue
         sources = ", ".join(entry.source_papers)
-        line = f"- [{entry.type}] (from: {sources}, relevance: {score:.2f}): {content}"
+        prefix = "SYNTHESIZED " if entry.type == "insight" else ""
+        line = f"- [{prefix}{entry.type}] (from: {sources}, relevance: {score:.2f}): {content}"
         if used + len(line) > char_budget:
             break
         memory_lines.append(line)
@@ -142,14 +163,26 @@ def _save_qa_as_memory(
     store: MemoryStore,
     index: EmbeddingIndex,
 ) -> None:
-    """Save synthesized Q&A as a new insight memory entry."""
+    """Save synthesized Q&A as a new insight memory entry.
+
+    Guards against memory amplification:
+    - confidence=0.35 (well below fact=1.0 / claim=0.8)
+    - embedding dedup: skip if >0.92 similar to existing entry
+    - insights excluded from default search_memory results
+    """
     if len(query) > 1000:
         query = query[:1000]
     content = f"Q: {query}\nA: {answer[:500]}"
-    entry_id = hashlib.sha256(f"qa:{query}".encode()).hexdigest()[:16]
+    entry_id = make_entry_id("qa", query)
 
     if store.get(entry_id):
-        return  # already exists
+        return  # ID exact duplicate
+
+    # Embedding-based dedup: skip near-duplicates
+    if len(index) > 0:
+        top_matches = index.search(content, k=1)
+        if top_matches and top_matches[0][1] > 0.92:
+            return  # semantically near-duplicate
 
     entry = MemoryEntry(
         id=entry_id,
@@ -157,7 +190,7 @@ def _save_qa_as_memory(
         content=content,
         source_papers=["synthesized_qa"],
         domain_tags=[],
-        confidence=0.7,
+        confidence=0.35,
     )
     store.add(entry)
     index.add(entry_id, content)

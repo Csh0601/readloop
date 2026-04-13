@@ -46,7 +46,21 @@ def build_graph_from_analyses(
 
         extraction_to_graph(extraction, paper_dir.name, graph)
 
-    # Detect cross-paper edges
+    # Canonicalize synonymous concepts before cross-paper detection
+    try:
+        from .canonicalize import canonicalize_concepts, prune_hapax_nodes
+
+        remap = canonicalize_concepts(graph)
+        if remap:
+            print(f"  merged {len(remap)} synonymous nodes")
+
+        pruned = prune_hapax_nodes(graph)
+        if pruned:
+            print(f"  pruned {pruned} single-occurrence nodes")
+    except Exception as e:
+        print(f"  canonicalization skipped: {e}")
+
+    # Detect cross-paper edges (more accurate after merge)
     detect_cross_paper_edges(graph)
 
     # Save

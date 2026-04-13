@@ -186,3 +186,51 @@ def label_communities(
             labels[cid] = f"Community {cid}"
 
     return labels
+
+
+# --- LLM-based community naming with cache ---
+
+import hashlib
+
+_label_cache: dict[str, str] = {}
+
+
+def _community_signature(node_ids: list[str]) -> str:
+    return hashlib.md5(",".join(sorted(node_ids)).encode()).hexdigest()[:12]
+
+
+def label_communities_llm(
+    graph: KnowledgeGraph,
+    communities: dict[int, list[str]],
+    client,
+) -> dict[int, str]:
+    """Use LLM to name communities. Caches by community membership hash."""
+    labels: dict[int, str] = {}
+
+    for cid, node_ids in communities.items():
+        sig = _community_signature(node_ids)
+        if sig in _label_cache:
+            labels[cid] = _label_cache[sig]
+            continue
+
+        nodes = [graph.get_node(nid) for nid in node_ids[:10] if graph.get_node(nid)]
+        if not nodes:
+            labels[cid] = f"Community {cid}"
+            continue
+
+        descriptions = [f"- {n.label} ({n.type})" for n in nodes]
+        prompt = (
+            "Given these research concepts in a cluster:\n"
+            + "\n".join(descriptions)
+            + "\n\nProvide a concise 2-5 word research theme name. Return ONLY the name."
+        )
+        try:
+            name = client.chat(prompt, max_tokens=50).strip().strip('"').strip("'")
+            labels[cid] = name
+            _label_cache[sig] = name
+        except Exception:
+            # Fallback to heuristic naming
+            fallback = label_communities(graph, {cid: node_ids})
+            labels[cid] = fallback.get(cid, f"Community {cid}")
+
+    return labels

@@ -1,11 +1,11 @@
 """记忆存储 -- 从 analysis.md 提取 + 持久化"""
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 from ..client import LLMClient
 from ..config import MEMORY_DIR
+from ..utils import make_entry_id, make_paper_id
 from .models import MemoryStore, MemoryEntry
 from .embeddings import EmbeddingIndex
 from .prompts import EXTRACT_MEMORIES
@@ -13,8 +13,7 @@ from .prompts import EXTRACT_MEMORIES
 
 def _make_id(content: str, paper: str) -> str:
     """Deterministic ID from content + paper."""
-    h = hashlib.md5(f"{paper}:{content}".encode()).hexdigest()[:12]
-    return h
+    return make_entry_id("mem", content, paper)
 
 
 def extract_memories_from_analysis(
@@ -73,11 +72,12 @@ def build_memory_from_analyses(
         if not analysis_path.exists():
             continue
 
-        print(f"  extracting memories: {paper_dir.name[:50]}...")
+        paper_id = make_paper_id(paper_dir.name)
+        print(f"  extracting memories: {paper_id[:50]}...")
         analysis = analysis_path.read_text(encoding="utf-8")
 
         try:
-            entries = extract_memories_from_analysis(analysis, paper_dir.name, client)
+            entries = extract_memories_from_analysis(analysis, paper_id, client)
         except Exception as e:
             print(f"    failed: {e}")
             continue

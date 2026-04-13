@@ -185,6 +185,15 @@ graph LR
 ### 11.3 需要规避的问题
 （论文暴露的局限性，我们如何规避）
 
+## 弹性原则
+
+以上 11 节是推荐结构，请根据论文实际情况灵活调整：
+- Survey/综述：可省略第5节（系统架构）和第7.4节（消融实验），扩展第3节和第10节
+- Benchmark/评测：可省略第4节（创新点深度分析），扩展第7节
+- 某一节确实不适用时，整节省略比硬填更好
+- Mermaid 图只在确实有助于理解时绘制，不强制
+- 重点是分析的深度和准确性，而非格式完整性
+
 ---
 """
 
@@ -373,6 +382,97 @@ graph TD
 - **快速了解领域**: ...
 - **做 Agent Memory 系统**: ...
 - **写综述论文**: ...
+
+---
+*ReadLoop Agent Harness | {count} papers analyzed*
+"""
+
+
+EXTRACT_PAPER_DIGEST = """从以下论文分析报告中提取结构化精华，用JSON格式返回。
+
+{analysis_text}
+
+返回格式（严格 JSON，不要 markdown fence）：
+{{
+  "title": "论文标题",
+  "one_liner": "一句话总结（问题+方法+结果）",
+  "method": "核心方法描述（100字以内）",
+  "key_claims": ["主要发现1", "主要发现2", "主要发现3"],
+  "evaluation": "实验评估总结（100字以内，含关键指标数据）",
+  "limitations": ["局限1", "局限2"],
+  "domain_tags": ["tag1", "tag2", "tag3"]
+}}
+"""
+
+
+CROSS_ANALYSIS_STAGE_A = """你是 Agent Memory 领域的跨论文分析专家。以下是 {count} 篇论文的结构化精华：
+
+{digests}
+
+请从中发现跨论文的洞察（单独读论文不容易发现的）。返回 JSON：
+{{
+  "insights": [
+    {{
+      "claim": "具体洞察（一句话，要具体到方法名/指标/结论）",
+      "evidence_papers": ["论文1标题", "论文2标题"],
+      "type": "comparison|gap|pattern|contradiction"
+    }}
+  ]
+}}
+
+要求：
+- 每条 insight 必须引用至少 2 篇论文
+- 不要泛泛而谈，要具体到方法名、指标、结论
+- 生成 10-20 条候选 insights
+- type 含义：comparison=方法对比, gap=研究空白, pattern=共性趋势, contradiction=矛盾发现
+"""
+
+
+CROSS_ANALYSIS_VERIFY = """验证以下跨论文洞察是否有证据支撑。
+
+Claim: {claim}
+
+Evidence from cited papers:
+{evidence}
+
+返回 JSON：
+{{
+  "grounded": true/false,
+  "reason": "简要说明为什么有/没有证据支撑（1-2句）"
+}}
+
+严格判断标准：
+- claim 中的具体结论/对比/数据必须能在 evidence 中找到依据
+- 仅仅"主题相关"不算 grounded
+- 如果 claim 做了 evidence 中没有的推断，判 false
+"""
+
+
+CROSS_ANALYSIS_FINAL = """你是 Agent Memory 领域深耕多年的研究员和系统架构师。
+你正在为一个 Agent Harness 驱动的论文分析系统生成核心输出。
+
+基于 {count} 篇论文的精华和已验证的跨论文洞察，生成综合分析报告。
+
+## 论文精华
+
+{digests}
+
+## 已验证的洞察（每条都有证据支撑）
+
+{verified_insights}
+
+请生成完整的跨论文综合分析报告，包含以下部分：
+
+1. **研究版图**: 论文分类矩阵、研究热点分布
+2. **核心技术路线对比**: 方法对比表（至少 7 个维度）、创新矩阵
+3. **知识关联图谱**: 论文间的关系（改进/对比/互补/启发）
+4. **共性问题与分歧解法**: 核心挑战对比、未解决的分歧、所有论文都忽视的盲区
+5. **统一系统架构蓝图**: 综合最优实践的架构设计
+6. **研究空白与机会**: 方向、重要性、切入点
+7. **Harness 价值展示**: 5+ 条跨论文洞察（必须基于上方已验证的洞察）
+8. **推荐阅读路径**: 入门→进阶→前沿→工程实践
+
+重要：第 7 节的洞察必须引用具体论文名和证据，不要凭空编造。
 
 ---
 *ReadLoop Agent Harness | {count} papers analyzed*

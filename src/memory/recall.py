@@ -27,13 +27,20 @@ def get_recall_context(
     if len(index) == 0:
         return ""
 
-    results = search_memory(paper_preview, store, index, top_k)
+    # Use first 500 chars (title + abstract head) for more focused retrieval
+    # Shorter query has better discrimination than full 2000-char preview
+    focused_query = paper_preview[:500]
+    results = search_memory(focused_query, store, index, top_k)
     if not results:
         return ""
 
+    # Relative threshold: discard scores < 50% of top result (min 0.15)
+    top_score = results[0][1] if results else 0
+    threshold = max(0.15, top_score * 0.5)
+
     memory_lines = []
     for entry_id, score, content in results:
-        if score < 0.2:  # skip low relevance
+        if score < threshold:
             continue
         entry = store.get(entry_id)
         if entry:

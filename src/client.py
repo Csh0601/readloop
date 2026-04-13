@@ -1,4 +1,4 @@
-"""LLM 客户端 -- Claude Sonnet 4.6 (primary) + DeepSeek (fallback)"""
+"""LLM 客户端 -- DeepSeek V3 (primary, fast & low-cost) + Claude Sonnet 4.6 (fallback)"""
 import json
 import re
 
@@ -49,6 +49,22 @@ class LLMClient:
 
         raise RuntimeError("No LLM client available")
 
+    def chat_with_meta(self, prompt: str, max_tokens: int = MAX_TOKENS) -> tuple[str, str]:
+        """Call LLM and return (response_text, model_name_used)."""
+        if self._deepseek:
+            try:
+                text = self._call(
+                    self._deepseek, DEEPSEEK_MODEL, prompt, min(max_tokens, 8192)
+                )
+                return text, DEEPSEEK_MODEL
+            except Exception as e:
+                print(f"  [DeepSeek failed: {e}, trying Claude]")
+
+        if self._claude:
+            return self._call(self._claude, CLAUDE_MODEL, prompt, max_tokens), CLAUDE_MODEL
+
+        raise RuntimeError("No LLM client available")
+
     def chat_json(self, prompt: str, max_tokens: int = MAX_TOKENS) -> dict:
         """Call LLM and parse response as JSON. Retries once on parse failure."""
         text = self.chat(prompt, max_tokens)
@@ -81,19 +97,31 @@ class LLMClient:
         return content
 
 
+def _clean_trailing_commas(s: str) -> str:
+    """Remove trailing commas before } or ] (common LLM JSON error)."""
+    return re.sub(r',\s*([\]}])', r'\1', s)
+
+
+def _try_parse_json(s: str) -> dict:
+    """Try json.loads, falling back to trailing-comma cleanup."""
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return json.loads(_clean_trailing_commas(s))
+
+
 def _extract_json(text: str) -> dict:
-    """Extract JSON from LLM response, handling markdown fences."""
-    # Try direct parse
+    """Extract JSON from LLM response, handling markdown fences and trailing commas."""
     text = text.strip()
     if text.startswith("{"):
-        return json.loads(text)
+        return _try_parse_json(text)
     # Try extracting from ```json ... ``` block
     match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
     if match:
-        return json.loads(match.group(1).strip())
+        return _try_parse_json(match.group(1).strip())
     # Try finding first { to last }
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1:
-        return json.loads(text[start:end + 1])
+        return _try_parse_json(text[start:end + 1])
     raise ValueError(f"No JSON found in response: {text[:200]}")
