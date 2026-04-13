@@ -2,6 +2,7 @@
 import json
 import re
 
+import httpx
 from openai import OpenAI
 
 from .config import (
@@ -11,6 +12,7 @@ from .config import (
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
+    LLM_TRUST_ENV,
     MAX_TOKENS,
     TEMPERATURE,
 )
@@ -23,7 +25,7 @@ class LLMClient:
             self._claude = OpenAI(
                 api_key=CLAUDE_API_KEY,
                 base_url=CLAUDE_BASE_URL,
-                timeout=600.0,  # 10 min, avoid client-side timeout
+                http_client=httpx.Client(timeout=600.0, trust_env=LLM_TRUST_ENV),
             )
 
         self._deepseek = None
@@ -31,7 +33,7 @@ class LLMClient:
             self._deepseek = OpenAI(
                 api_key=DEEPSEEK_API_KEY,
                 base_url=DEEPSEEK_BASE_URL,
-                timeout=600.0,
+                http_client=httpx.Client(timeout=600.0, trust_env=LLM_TRUST_ENV),
             )
 
     def chat(self, prompt: str, max_tokens: int = MAX_TOKENS) -> str:

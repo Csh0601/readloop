@@ -171,25 +171,27 @@ def generate_html(
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ background: #0f0f1a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; height: 100vh; overflow: hidden; }}
         #graph {{ flex: 1; }}
-        #sidebar {{ width: 280px; background: #1a1a2e; border-left: 1px solid #2a2a4e; display: flex; flex-direction: column; overflow: hidden; }}
+        #sidebar {{ width: 340px; background: #1a1a2e; border-left: 1px solid #2a2a4e; display: flex; flex-direction: column; overflow: hidden; }}
         #search-wrap {{ padding: 12px; border-bottom: 1px solid #2a2a4e; }}
         #search {{ width: 100%; background: #0f0f1a; border: 1px solid #3a3a5e; color: #e0e0e0; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; }}
         #search:focus {{ border-color: #4E79A7; }}
         #search-results {{ max-height: 140px; overflow-y: auto; padding: 4px 12px; border-bottom: 1px solid #2a2a4e; display: none; }}
         .search-item {{ padding: 4px 6px; cursor: pointer; border-radius: 4px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
         .search-item:hover {{ background: #2a2a4e; }}
-        #info-panel {{ padding: 14px; border-bottom: 1px solid #2a2a4e; min-height: 120px; }}
+        #sidebar-main {{ flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }}
+        #info-panel {{ padding: 14px; border-bottom: 1px solid #2a2a4e; min-height: 120px; max-height: 36vh; overflow-y: auto; overflow-x: hidden; flex: 0 0 auto; }}
         #info-panel h3 {{ font-size: 13px; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }}
-        #info-content {{ font-size: 13px; color: #ccc; line-height: 1.6; }}
-        #info-content .field {{ margin-bottom: 5px; }}
+        #info-content {{ font-size: 13px; color: #ccc; line-height: 1.6; overflow-wrap: anywhere; word-break: break-word; }}
+        #info-content .field {{ margin-bottom: 8px; }}
         #info-content .field b {{ color: #e0e0e0; }}
         #info-content .empty {{ color: #555; font-style: italic; }}
-        .neighbor-link {{ display: block; padding: 2px 6px; margin: 2px 0; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid #333; }}
+        .field-muted {{ color: #8f93b2; font-size: 11px; }}
+        .neighbor-link {{ display: block; width: 100%; background: transparent; color: inherit; text-align: left; padding: 4px 6px; margin: 2px 0; border-radius: 3px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: none; border-left: 3px solid #333; }}
         .neighbor-link:hover {{ background: #2a2a4e; }}
         #neighbors-list {{ max-height: 130px; overflow-y: auto; margin-top: 4px; }}
+        #legend-scroll {{ flex: 1; min-height: 0; overflow-y: auto; }}
         .legend-section {{ padding: 10px 12px; border-bottom: 1px solid #2a2a4e; }}
         .legend-section h3 {{ font-size: 12px; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }}
-        #legend-communities {{ flex: 1; overflow-y: auto; }}
         .legend-item {{ display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; border-radius: 4px; font-size: 12px; }}
         .legend-item:hover {{ background: #2a2a4e; padding-left: 4px; }}
         .legend-item.dimmed {{ opacity: 0.35; }}
@@ -207,17 +209,21 @@ def generate_html(
             <input id="search" type="text" placeholder="Search nodes...">
         </div>
         <div id="search-results"></div>
-        <div id="info-panel">
-            <h3>Node Info</h3>
-            <div id="info-content"><span class="empty">Click a node to inspect it</span></div>
-        </div>
-        <div class="legend-section">
-            <h3>Communities</h3>
-            <div id="legend-communities"></div>
-        </div>
-        <div class="legend-section">
-            <h3>Node Types</h3>
-            <div id="legend-types"></div>
+        <div id="sidebar-main">
+            <div id="info-panel">
+                <h3>Node Info</h3>
+                <div id="info-content"><span class="empty">Click a node to inspect it</span></div>
+            </div>
+            <div id="legend-scroll">
+                <div class="legend-section">
+                    <h3>Communities</h3>
+                    <div id="legend-communities"></div>
+                </div>
+                <div class="legend-section">
+                    <h3>Node Types</h3>
+                    <div id="legend-types"></div>
+                </div>
+            </div>
         </div>
         <div id="stats">{stats['total_nodes']} nodes | {stats['total_edges']} edges | {len(communities) if has_communities else 0} communities</div>
     </div>
@@ -276,17 +282,19 @@ function showInfo(nodeId) {{
   const n = nodesDS.get(nodeId);
   if (!n) return;
   const neighborIds = network.getConnectedNodes(nodeId);
-  const neighborItems = neighborIds.map(nid => {{
+  const shownNeighborIds = neighborIds.slice(0, 12);
+  const hiddenNeighborCount = Math.max(0, neighborIds.length - shownNeighborIds.length);
+  const neighborItems = shownNeighborIds.map(nid => {{
     const nb = nodesDS.get(nid);
     const color = nb ? nb.color.background : '#555';
-    return `<span class="neighbor-link" style="border-left-color:${{esc(color)}}" onclick="focusNode(${{JSON.stringify(nid)}})">${{esc(nb ? nb.label : nid)}}</span>`;
+    return `<button type="button" class="neighbor-link" style="border-left-color:${{esc(color)}}" onclick="focusNode(${{JSON.stringify(nid)}})">${{esc(nb ? nb.label : nid)}}</button>`;
   }}).join('');
   document.getElementById('info-content').innerHTML = `
     <div class="field"><b>${{esc(n.label)}}</b></div>
     <div class="field">Type: ${{esc(n._node_type || 'unknown')}}</div>
     ${{n._community >= 0 ? `<div class="field">Community: ${{esc(n._community_name)}}</div>` : ''}}
     <div class="field">Degree: ${{n._degree}}</div>
-    ${{neighborIds.length ? `<div class="field" style="margin-top:6px;color:#aaa;font-size:11px">Neighbors (${{neighborIds.length}})</div><div id="neighbors-list">${{neighborItems}}</div>` : ''}}
+    ${{neighborIds.length ? `<div class="field field-muted">Neighbors (${{neighborIds.length}})</div><div id="neighbors-list">${{neighborItems}}</div>${{hiddenNeighborCount ? `<div class="field field-muted">+${{hiddenNeighborCount}} more neighbors not shown</div>` : ''}}` : ''}}
   `;
 }}
 

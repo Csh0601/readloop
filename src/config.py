@@ -16,6 +16,21 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
+# --- Network routing ---
+# LLM calls direct-connect by default; set READLOOP_LLM_TRUST_ENV=1 only if the
+# API endpoint must use your system/environment proxy settings.
+LLM_TRUST_ENV = os.environ.get("READLOOP_LLM_TRUST_ENV", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+# sentence-transformers / Hugging Face downloads can use a separate proxy.
+EMBEDDING_HTTP_PROXY = os.environ.get("EMBEDDING_HTTP_PROXY", "")
+EMBEDDING_HTTPS_PROXY = os.environ.get("EMBEDDING_HTTPS_PROXY", "")
+EMBEDDING_ALL_PROXY = os.environ.get("EMBEDDING_ALL_PROXY", "")
+
 # --- Paths ---
 REFERENCE_DIRS = [
     Path(os.environ.get("REFERENCE_DIR_1", "D:/wu/reference paper")),

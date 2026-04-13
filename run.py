@@ -504,7 +504,12 @@ def _load_existing_results():
         report = d / "analysis.md"
         if report.exists():
             analysis = report.read_text(encoding="utf-8")
-            results.append({"name": d.name, "analysis": analysis})
+            results.append({
+                "name": d.name,
+                "output_path": d,
+                "summary": d.name,
+                "analysis": analysis,
+            })
     return results
 
 

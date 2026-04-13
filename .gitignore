@@ -1,3 +1,25 @@
+# Local secrets and environment
 .env
+.env.*
+!.env.example
+
+# Python caches
 __pycache__/
 *.pyc
+.ruff_cache/
+
+# Large or generated research assets
+output/
+reference paper/
+papers/
+*.pdf
+*.npy
+memory_store.json
+embedding_ids.json
+graph.json
+graph.html
+graph.graphml
+
+# Local scratch / logs
+*.log
+=3.0

@@ -2,12 +2,47 @@
 from __future__ import annotations
 
 import os
-import numpy as np
+from contextlib import contextmanager
 from pathlib import Path
+
+import numpy as np
+
+from ..config import (
+    EMBEDDING_ALL_PROXY,
+    EMBEDDING_HTTP_PROXY,
+    EMBEDDING_HTTPS_PROXY,
+)
 
 _model = None
 _MODEL_NAME = "all-MiniLM-L6-v2"  # 22MB, 384 dims, fast on CPU
 _MODEL_PATH = os.environ.get("READLOOP_EMBEDDING_MODEL", _MODEL_NAME)
+
+
+@contextmanager
+def _embedding_proxy_env():
+    """Temporarily apply proxy settings for Hugging Face downloads."""
+    updates = {
+        "HTTP_PROXY": EMBEDDING_HTTP_PROXY,
+        "http_proxy": EMBEDDING_HTTP_PROXY,
+        "HTTPS_PROXY": EMBEDDING_HTTPS_PROXY,
+        "https_proxy": EMBEDDING_HTTPS_PROXY,
+        "ALL_PROXY": EMBEDDING_ALL_PROXY,
+        "all_proxy": EMBEDDING_ALL_PROXY,
+    }
+    old_values = {key: os.environ.get(key) for key in updates}
+
+    for key, value in updates.items():
+        if value:
+            os.environ[key] = value
+
+    try:
+        yield
+    finally:
+        for key, old_value in old_values.items():
+            if old_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old_value
 
 
 def _get_model():
@@ -15,7 +50,8 @@ def _get_model():
     if _model is None:
         from sentence_transformers import SentenceTransformer
         try:
-            _model = SentenceTransformer(_MODEL_PATH)
+            with _embedding_proxy_env():
+                _model = SentenceTransformer(_MODEL_PATH)
         except Exception as e:
             raise RuntimeError(
                 f"Failed to load embedding model '{_MODEL_PATH}': {e}\n"

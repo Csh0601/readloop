@@ -63,6 +63,10 @@ def build_graph_from_analyses(
     # Detect cross-paper edges (more accurate after merge)
     detect_cross_paper_edges(graph)
 
+    dropped = prune_dangling_edges(graph)
+    if dropped:
+        print(f"  dropped {dropped} dangling edges")
+
     # Save
     graph.save(graph_path)
     return graph
@@ -97,6 +101,7 @@ def add_paper_to_graph(
 
     extraction_to_graph(extraction, paper_dir.name, graph)
     detect_cross_paper_edges(graph)
+    prune_dangling_edges(graph)
     graph.save(graph_path)
     return graph
 
@@ -140,6 +145,16 @@ def detect_cross_paper_edges(graph: KnowledgeGraph) -> int:
                     existing_pairs.add(pair)
                     added += 1
     return added
+
+
+def prune_dangling_edges(graph: KnowledgeGraph) -> int:
+    """Remove edges whose source/target nodes do not exist."""
+    before = len(graph.edges)
+    graph.edges = [
+        edge for edge in graph.edges
+        if edge.source in graph.nodes and edge.target in graph.nodes
+    ]
+    return before - len(graph.edges)
 
 
 def find_gaps(graph: KnowledgeGraph, client: LLMClient) -> str:

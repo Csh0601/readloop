@@ -288,7 +288,12 @@ def _cmd_cross(_args: str):
     for d in sorted(OUTPUT_DIR.iterdir()):
         if d.is_dir() and not d.name.startswith("00_") and (d / "analysis.md").exists():
             analysis = (d / "analysis.md").read_text(encoding="utf-8")
-            results.append({"name": d.name, "analysis": analysis})
+            results.append({
+                "name": d.name,
+                "output_path": d,
+                "summary": d.name,
+                "analysis": analysis,
+            })
 
     if len(results) < 2:
         console.print(f"[red]Need 2+ analyses, found {len(results)}[/]")

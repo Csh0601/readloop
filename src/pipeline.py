@@ -184,15 +184,22 @@ def generate_cross_analysis(results: list[dict], client: LLMClient) -> Path:
     console.print("  [dim]Stage A: loading paper digests...[/]")
     digests: dict[str, dict] = {}
     for r in successful:
-        digest_path = r["output_path"] / "digest.json" if r["output_path"] else None
+        paper_name = r.get("name", "unknown")
+        output_dir = r.get("output_path")
+        digest_path = Path(output_dir) / "digest.json" if output_dir else None
         if digest_path and digest_path.exists():
-            digests[r["name"]] = json.loads(digest_path.read_text(encoding="utf-8"))
-        else:
-            digests[r["name"]] = {
-                "title": r["name"],
-                "one_liner": r["summary"],
-                "method": r["analysis"][:2000],
-            }
+            try:
+                digests[paper_name] = json.loads(digest_path.read_text(encoding="utf-8"))
+                continue
+            except json.JSONDecodeError as e:
+                console.print(f"  [yellow]digest unreadable for {paper_name}: {e}[/]")
+
+        analysis_text = r.get("analysis", "")
+        digests[paper_name] = {
+            "title": paper_name,
+            "one_liner": r.get("summary") or paper_name,
+            "method": analysis_text[:2000],
+        }
 
     digest_blob = json.dumps(digests, ensure_ascii=False, indent=2)
 
