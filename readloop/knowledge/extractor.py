@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from ..client import LLMClient
+from ..exceptions import ExtractionError
 from .models import KnowledgeGraph, Node, Edge
 from .prompts import EXTRACT_ENTITIES
 
@@ -30,7 +31,10 @@ def extract_from_analysis(
         analysis_text = analysis_text[:40000]
 
     prompt = EXTRACT_ENTITIES.format(analysis_text=analysis_text)
-    return client.chat_json(prompt, max_tokens=4000)
+    try:
+        return client.chat_json(prompt, max_tokens=4000)
+    except (ValueError, Exception) as e:
+        raise ExtractionError(f"Failed to extract entities from {paper_name}: {e}") from e
 
 
 def extraction_to_graph(

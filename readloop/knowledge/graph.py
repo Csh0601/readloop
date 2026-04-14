@@ -20,31 +20,41 @@ def build_graph_from_analyses(
     graph_path = GRAPH_DIR / "graph.json"
     graph = KnowledgeGraph()
 
-    # Find all paper output dirs
-    for paper_dir in sorted(output_dir.iterdir()):
-        if not paper_dir.is_dir() or paper_dir.name.startswith("00_"):
-            continue
+    from rich.console import Console
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
 
-        analysis_path = paper_dir / "analysis.md"
-        extraction_path = paper_dir / "extraction.json"
+    console = Console(force_terminal=True)
 
-        if not analysis_path.exists():
-            continue
+    # Find all paper output dirs with analyses
+    paper_dirs = [
+        d for d in sorted(output_dir.iterdir())
+        if d.is_dir() and not d.name.startswith("00_") and (d / "analysis.md").exists()
+    ]
 
-        # Use cached extraction if available
-        if extraction_path.exists():
-            extraction = json.loads(extraction_path.read_text(encoding="utf-8"))
-        else:
-            # Extract from analysis
-            print(f"  extracting: {paper_dir.name[:50]}...")
-            analysis = analysis_path.read_text(encoding="utf-8")
-            extraction = extract_from_analysis(analysis, paper_dir.name, client)
-            extraction_path.write_text(
-                json.dumps(extraction, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Building knowledge graph", total=len(paper_dirs))
+        for paper_dir in paper_dirs:
+            progress.update(task, description=f"[cyan]{paper_dir.name[:50]}[/]")
+            extraction_path = paper_dir / "extraction.json"
 
-        extraction_to_graph(extraction, paper_dir.name, graph)
+            if extraction_path.exists():
+                extraction = json.loads(extraction_path.read_text(encoding="utf-8"))
+            else:
+                analysis = (paper_dir / "analysis.md").read_text(encoding="utf-8")
+                extraction = extract_from_analysis(analysis, paper_dir.name, client)
+                extraction_path.write_text(
+                    json.dumps(extraction, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+
+            extraction_to_graph(extraction, paper_dir.name, graph)
+            progress.advance(task)
 
     # Canonicalize synonymous concepts before cross-paper detection
     try:
@@ -52,20 +62,20 @@ def build_graph_from_analyses(
 
         remap = canonicalize_concepts(graph)
         if remap:
-            print(f"  merged {len(remap)} synonymous nodes")
+            console.print(f"  [dim]merged {len(remap)} synonymous nodes[/]")
 
         pruned = prune_hapax_nodes(graph)
         if pruned:
-            print(f"  pruned {pruned} single-occurrence nodes")
+            console.print(f"  [dim]pruned {pruned} single-occurrence nodes[/]")
     except Exception as e:
-        print(f"  canonicalization skipped: {e}")
+        console.print(f"  [yellow]canonicalization skipped: {e}[/]")
 
     # Detect cross-paper edges (more accurate after merge)
     detect_cross_paper_edges(graph)
 
     dropped = prune_dangling_edges(graph)
     if dropped:
-        print(f"  dropped {dropped} dangling edges")
+        console.print(f"  [dim]dropped {dropped} dangling edges[/]")
 
     # Save
     graph.save(graph_path)

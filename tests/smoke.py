@@ -5,13 +5,9 @@ Usage: python -m tests.smoke
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src.config import OUTPUT_DIR, MEMORY_DIR, GRAPH_DIR
-from src.knowledge.models import KnowledgeGraph
+from readloop.config import OUTPUT_DIR, MEMORY_DIR, GRAPH_DIR
+from readloop.knowledge.models import KnowledgeGraph
 
 OUTPUT = OUTPUT_DIR
 MEMORY = MEMORY_DIR
@@ -20,8 +16,8 @@ GRAPH = GRAPH_DIR
 
 def test_memory_index_sync():
     """All memory entries have corresponding embeddings."""
-    from src.memory.models import MemoryStore
-    from src.memory.embeddings import EmbeddingIndex
+    from readloop.memory.models import MemoryStore
+    from readloop.memory.embeddings import EmbeddingIndex
 
     store = MemoryStore.load(MEMORY / "memory_store.json")
     index = EmbeddingIndex.load(MEMORY)
@@ -38,8 +34,8 @@ def test_memory_index_sync():
 
 def test_paper_id_consistency():
     """All source_papers in memory can be mapped to paper dirs."""
-    from src.utils import make_paper_id
-    from src.memory.models import MemoryStore
+    from readloop.utils import make_paper_id
+    from readloop.memory.models import MemoryStore
 
     store = MemoryStore.load(MEMORY / "memory_store.json")
     paper_ids = {
