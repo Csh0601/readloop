@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "readloop"
+version = "2.2.0"
+description = "Agent harness for multi-paper research: knowledge graph + memory + cross-paper synthesis"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Csh0601" },
+]
+keywords = ["research", "paper", "knowledge-graph", "memory", "llm", "agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: General",
+]
+dependencies = [
+    "openai>=1.0.0",
+    "PyMuPDF>=1.24.0",
+    "rich>=13.0.0",
+    "python-dotenv>=1.0.0",
+    "sentence-transformers>=2.2.0",
+    "numpy>=1.24.0",
+    "networkx>=3.0",
+    "prompt_toolkit>=3.0.0",
+    "httpx>=0.24.0",
+]
+
+[project.optional-dependencies]
+leiden = ["graspologic>=3.0.0"]
+fast = ["faiss-cpu>=1.7.0"]
+all = ["graspologic>=3.0.0", "faiss-cpu>=1.7.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.4.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+readloop = "readloop.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Csh0601/readloop"
+Repository = "https://github.com/Csh0601/readloop"
+Issues = "https://github.com/Csh0601/readloop/issues"
+
+[tool.setuptools.packages.find]
+include = ["readloop*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -3,10 +3,13 @@
 .env.*
 !.env.example
 
-# Python caches
+# Python caches and build artifacts
 __pycache__/
 *.pyc
 .ruff_cache/
+*.egg-info/
+dist/
+build/
 
 # Large or generated research assets
 output/

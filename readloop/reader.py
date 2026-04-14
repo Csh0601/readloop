@@ -59,12 +59,71 @@ def extract_paper_text(paper_path: Path) -> tuple[str, str]:
             text = extract_from_pdf(pdfs[0])
             return "pdf", text
 
-        # 无 PDF，检查图片
+        # 无 PDF，检查图片 — OCR 提取文本
         images = sorted(paper_path.glob("*.jpg")) + sorted(paper_path.glob("*.png"))
         if images:
-            return "images", ""
+            text = extract_text_from_images(images)
+            return "images", text
 
     raise FileNotFoundError(f"No PDF or images found: {paper_path}")
+
+
+def extract_text_from_images(image_paths: list[Path], max_pages: int = 30) -> str:
+    """Extract text from paper page images using PyMuPDF OCR or Tesseract.
+
+    Falls back to empty string if no OCR engine is available.
+    """
+    image_paths = image_paths[:max_pages]
+    pages: list[str] = []
+
+    for i, img_path in enumerate(image_paths):
+        text = _ocr_single_image(img_path)
+        if text.strip():
+            pages.append(f"--- Page {i + 1} ---\n{text.strip()}")
+
+    return "\n\n".join(pages)
+
+
+def _ocr_single_image(img_path: Path) -> str:
+    """OCR a single image using PyMuPDF's built-in text extraction.
+
+    PyMuPDF can open image files as single-page documents and extract text
+    from embedded text layers, or use Tesseract if available.
+    """
+    try:
+        # PyMuPDF can open images directly as documents
+        doc = fitz.open(str(img_path))
+        page = doc[0]
+
+        # Try direct text extraction first (works for images with text layers)
+        text = page.get_text("text")
+        if text.strip():
+            doc.close()
+            return text
+
+        # Try OCR via Tesseract if available (PyMuPDF >= 1.19 supports this)
+        try:
+            text = page.get_textpage_ocr(flags=0, full=True).extractText()
+            doc.close()
+            return text
+        except Exception:
+            pass
+
+        doc.close()
+    except Exception:
+        pass
+
+    # Last resort: try pytesseract directly
+    try:
+        import pytesseract
+        from PIL import Image
+        img = Image.open(img_path)
+        return pytesseract.image_to_string(img)
+    except Exception:
+        # ImportError (not installed), TesseractNotFoundError (not in PATH), etc.
+        pass
+
+    return ""
 
 
 def get_paper_name(paper_path: Path) -> str:

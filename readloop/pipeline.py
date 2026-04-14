@@ -12,6 +12,7 @@ from rich.console import Console
 console = Console(force_terminal=True)
 
 from .client import LLMClient
+from .exceptions import ExtractionError, PaperError
 from .reader import extract_paper_text, get_paper_name
 from .prompts import PAPER_ANALYSIS
 from .config import OUTPUT_DIR, MAX_TOKENS
@@ -53,7 +54,7 @@ def analyze_single_paper(paper_path: Path, client: LLMClient) -> dict:
     console.print("  [dim]extracting text...[/]")
     fmt, text = extract_paper_text(paper_path)
     if not text.strip():
-        raise ValueError(f"No text extracted from {paper_path}")
+        raise PaperError(f"No text extracted from {paper_path}")
 
     text = _smart_truncate(text)
 
@@ -131,22 +132,33 @@ def _post_extract(output_path: Path, analysis: str, paper_name: str, client: LLM
 
 
 def analyze_all_papers(paper_paths: list[Path], client: LLMClient) -> list[dict]:
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
+
     results = []
     total = len(paper_paths)
     failed = []
 
-    for i, path in enumerate(paper_paths, 1):
-        console.print(f"\n[bold]=== [{i}/{total}] ===[/]")
-        try:
-            results.append(analyze_single_paper(path, client))
-        except Exception as e:
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Analyzing papers", total=total)
+        for path in paper_paths:
             name = get_paper_name(path)
-            console.print(f"  [bold red]FAIL: {name[:50]} -- {e}[/]")
-            failed.append((name, str(e)))
-            results.append({
-                "name": name, "output_path": None,
-                "summary": f"failed: {e}", "analysis": "",
-            })
+            progress.update(task, description=f"[cyan]{name[:50]}[/]")
+            try:
+                results.append(analyze_single_paper(path, client))
+            except Exception as e:
+                console.print(f"  [bold red]FAIL: {name[:50]} -- {e}[/]")
+                failed.append((name, str(e)))
+                results.append({
+                    "name": name, "output_path": None,
+                    "summary": f"failed: {e}", "analysis": "",
+                })
+            progress.advance(task)
 
     if failed:
         console.print(f"\n[bold red]Failed ({len(failed)}/{total}):[/]")

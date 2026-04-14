@@ -58,40 +58,52 @@ def build_memory_from_analyses(
     client: LLMClient,
 ) -> tuple[MemoryStore, EmbeddingIndex]:
     """Build full memory store + embedding index from all analyses."""
+    from rich.console import Console
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
+
+    console = Console(force_terminal=True)
     store_path = MEMORY_DIR / "memory_store.json"
     store = MemoryStore()
     index = EmbeddingIndex()
 
     batch_entries: list[tuple[str, str]] = []
 
-    for paper_dir in sorted(output_dir.iterdir()):
-        if not paper_dir.is_dir() or paper_dir.name.startswith("00_"):
-            continue
+    paper_dirs = [
+        d for d in sorted(output_dir.iterdir())
+        if d.is_dir() and not d.name.startswith("00_") and (d / "analysis.md").exists()
+    ]
 
-        analysis_path = paper_dir / "analysis.md"
-        if not analysis_path.exists():
-            continue
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Extracting memories", total=len(paper_dirs))
+        for paper_dir in paper_dirs:
+            paper_id = make_paper_id(paper_dir.name)
+            progress.update(task, description=f"[cyan]{paper_id[:50]}[/]")
+            analysis = (paper_dir / "analysis.md").read_text(encoding="utf-8")
 
-        paper_id = make_paper_id(paper_dir.name)
-        print(f"  extracting memories: {paper_id[:50]}...")
-        analysis = analysis_path.read_text(encoding="utf-8")
+            try:
+                entries = extract_memories_from_analysis(analysis, paper_id, client)
+            except Exception as e:
+                console.print(f"  [red]failed: {paper_id[:40]}: {e}[/]")
+                progress.advance(task)
+                continue
 
-        try:
-            entries = extract_memories_from_analysis(analysis, paper_id, client)
-        except Exception as e:
-            print(f"    failed: {e}")
-            continue
+            for entry in entries:
+                store.add(entry)
+                batch_entries.append((entry.id, entry.content))
 
-        for entry in entries:
-            store.add(entry)
-            batch_entries.append((entry.id, entry.content))
+            progress.advance(task)
 
-    # Build embeddings in batch (much faster)
+    # Build embeddings in batch
     if batch_entries:
-        print(f"  building embeddings for {len(batch_entries)} entries...")
+        console.print(f"  [dim]Building embeddings for {len(batch_entries)} entries...[/]")
         index.add_batch(batch_entries)
 
-    # Save
     store.save(store_path)
     index.save(MEMORY_DIR)
 
